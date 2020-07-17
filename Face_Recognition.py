@@ -1,0 +1,102 @@
+from keras import backend as K
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
+tf.compat.v1.disable_resource_variables()
+K.set_image_data_format('channels_first')
+from fr_utils import *
+from inception_blocks_v2 import *
+from scipy import misc, ndimage
+
+
+FRmodel = faceRecoModel(input_shape=(3, 96, 96))
+
+print("Total Params:", FRmodel.count_params())
+
+
+def triplet_loss(y_true, y_pred, alpha = 0.2):
+    
+    anchor, positive, negative = y_pred[0], y_pred[1], y_pred[2]
+
+    pos_dist = tf.reduce_sum(tf.square(tf.subtract(anchor, positive)), axis = -1)
+
+    neg_dist = tf.reduce_sum(tf.square(tf.subtract(anchor, negative)), axis = -1)
+
+    basic_loss = tf.add(tf.subtract(pos_dist, neg_dist), alpha)
+
+    loss = tf.reduce_sum(tf.maximum(basic_loss, 0))
+    
+    return loss
+
+with tf.compat.v1.Session() as test:
+    tf.random.set_seed(1)
+    y_true = (None, None, None)
+    y_pred = (tf.random.normal([3, 128], mean=6, stddev=0.1, seed = 1),
+              tf.random.normal([3, 128], mean=1, stddev=1, seed = 1),
+              tf.random.normal([3, 128], mean=3, stddev=4, seed = 1))
+    loss = triplet_loss(y_true, y_pred)
+    
+    print("loss = " + str(loss.eval()))
+
+
+FRmodel.compile(optimizer = 'adam', loss = triplet_loss, metrics = ['accuracy'])
+load_weights_from_FaceNet(FRmodel)
+
+
+database = {}
+database["danielle"] = img_to_encoding("D:\Face_Recognition\images\danielle.png", FRmodel)
+database["younes"] = img_to_encoding("D:\Face_Recognition\images\younes.jpg", FRmodel)
+database["tian"] = img_to_encoding("D:\Face_Recognition\images/tian.jpg", FRmodel)
+database["andrew"] = img_to_encoding("D:\Face_Recognition\images/andrew.jpg", FRmodel)
+database["kian"] = img_to_encoding("D:\Face_Recognition\images\kian.jpg", FRmodel)
+database["dan"] = img_to_encoding("D:\Face_Recognition\images\dan.jpg", FRmodel)
+database["sebastiano"] = img_to_encoding("D:\Face_Recognition\images\sebastiano.jpg", FRmodel)
+database["bertrand"] = img_to_encoding("D:\Face_Recognition\images/bertrand.jpg", FRmodel)
+database["kevin"] = img_to_encoding("D:\Face_Recognition\images\kevin.jpg", FRmodel)
+database["felix"] = img_to_encoding("D:\Face_Recognition\images/felix.jpg", FRmodel)
+database["benoit"] = img_to_encoding("D:\Face_Recognition\images/benoit.jpg", FRmodel)
+database["arnaud"] = img_to_encoding("D:\Face_Recognition\images/arnaud.jpg", FRmodel)
+database["sethu"] = img_to_encoding("D:\Face_Recognition\images\sethu.jpg", FRmodel)
+
+
+def verify(image_path, identity, database, model):
+
+    encoding = img_to_encoding(image_path, model)
+
+    dist = np.linalg.norm(encoding - database[identity])
+
+    if dist < 0.7:
+        print("It's " + str(identity) + ", welcome in!")
+        door_open = True
+    else:
+        print("It's not " + str(identity) + ", please go away")
+        door_open = False
+
+    return dist, door_open
+
+
+verify("D:\Face_Recognition\images\sethu_capture.jpg", "sethu", database, FRmodel)
+
+
+def who_is_it(image_path, database, model):
+
+    encoding = img_to_encoding(image_path, model)
+
+    min_dist = 100
+
+    for (name, db_enc) in database.items():
+
+        dist = np.linalg.norm(encoding - db_enc)
+
+        if dist < min_dist:
+            min_dist = dist
+            identity = name
+    
+    if min_dist > 0.7:
+        print("Not in the database.")
+    else:
+        print ("it's " + str(identity) + ", the distance is " + str(min_dist))
+        
+    return min_dist, identity
+
+who_is_it("D:\Face_Recognition\images\sethu_capture.jpg", database, FRmodel)
+
